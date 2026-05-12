@@ -1,0 +1,19 @@
+{
+  "name": "farm-mutant-viewer",
+  "version": "1.0.0",
+  "description": "农场变异查看器 - 解析Hex并映射农场作物变异",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ejs": "^3.1.9",
+    "protobufjs": "^8.0.0",
+    "body-parser": "^1.20.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
