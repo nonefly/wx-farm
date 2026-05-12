@@ -5,15 +5,8 @@ const fs = require('fs');
 const protobuf = require('protobufjs');
 
 const CONFIG = {
-    port: process.env.PORT || 3001,
-    historyDir: path.join(__dirname, 'history'),
-    historyLimit: 100
+    port: process.env.PORT || 3001
 };
-
-// 确保历史目录存在
-if (!fs.existsSync(CONFIG.historyDir)) {
-    fs.mkdirSync(CONFIG.historyDir, { recursive: true });
-}
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -302,36 +295,6 @@ async function parseHexMessage(hexData) {
     }
 }
 
-// ==================== 历史记录管理 ====================
-const historyFile = path.join(CONFIG.historyDir, 'history.json');
-
-function getHistory() {
-    try {
-        return fs.existsSync(historyFile) ? JSON.parse(fs.readFileSync(historyFile, 'utf8')) : [];
-    } catch { return []; }
-}
-
-function addHistory(hexData, parseResult, source = 'manual') {
-    try {
-        let history = getHistory();
-        if (history.length >= CONFIG.historyLimit) history = history.slice(0, CONFIG.historyLimit - 1);
-        history.unshift({
-            id: Date.now(),
-            timestamp: new Date().toLocaleString(),
-            hex: hexData.substring(0, 100) + (hexData.length > 100 ? '...' : ''),
-            fullHex: hexData,
-            service: parseResult?.basic?.service || '未知',
-            method: parseResult?.basic?.method || '未知',
-            type: parseResult?.basic?.typeName || '未知',
-            typeCode: parseResult?.basic?.type,
-            mutantCount: parseResult?.mutantCount || 0,
-            success: parseResult?.success !== false,
-            source
-        });
-        fs.writeFileSync(historyFile, JSON.stringify(history, null, 2));
-    } catch (e) { console.error('保存历史记录失败:', e); }
-}
-
 const MUTATION_TYPE_MAP = {
     1: { name: '冰冻', icon: '❄️', type: 1, class: 'mutant-ice', color: '#3b82f6' },
     2: { name: '爱心', icon: '❤️', type: 2, class: 'mutant-love', color: '#ec4899' },
@@ -471,14 +434,14 @@ app.get('/', async (req, res) => {
         res.render('index', { 
             result: null, 
             hexInput: '',
-            history: getHistory(),
+            history: [],
             formatTime 
         });
     } catch (e) {
         res.render('index', { 
             result: { success: false, error: e.message },
             hexInput: '',
-            history: getHistory(),
+            history: [],
             formatTime 
         });
     }
@@ -491,7 +454,7 @@ app.post('/', async (req, res) => {
             return res.render('index', { 
                 result: { success: false, error: '请输入Hex数据' },
                 hexInput: hex,
-                history: getHistory(),
+                history: [],
                 formatTime 
             });
         }
@@ -501,17 +464,12 @@ app.post('/', async (req, res) => {
         
         const result = await parseHexMessage(hex);
         
-        // 只有成功解析才加入历史记录
-        if (result.success !== false) {
-            addHistory(hex, result, source);
-        }
-        
-        res.render('index', { result, hexInput: hex, history: getHistory(), formatTime });
+        res.render('index', { result, hexInput: hex, history: [], formatTime });
     } catch (e) {
         res.render('index', { 
             result: { success: false, error: e.message },
             hexInput: req.body.hex,
-            history: getHistory(),
+            history: [],
             formatTime 
         });
     }
@@ -524,7 +482,7 @@ app.post('/parse', async (req, res) => {
             return res.render('index', { 
                 result: { success: false, error: '请输入Hex数据' },
                 hexInput: hex,
-                history: getHistory(),
+                history: [],
                 formatTime 
             });
         }
@@ -534,17 +492,12 @@ app.post('/parse', async (req, res) => {
         
         const result = await parseHexMessage(hex);
         
-        // 只有成功解析才加入历史记录
-        if (result.success !== false) {
-            addHistory(hex, result, source);
-        }
-        
-        res.render('index', { result, hexInput: hex, history: getHistory(), formatTime });
+        res.render('index', { result, hexInput: hex, history: [], formatTime });
     } catch (e) {
         res.render('index', { 
             result: { success: false, error: e.message },
             hexInput: req.body.hex,
-            history: getHistory(),
+            history: [],
             formatTime 
         });
     }
@@ -560,57 +513,9 @@ app.post('/api/parse', async (req, res) => {
         
         const result = await parseHexMessage(hex);
         
-        // 只有成功解析才加入历史记录
-        if (result.success !== false) {
-            addHistory(hex, result, source);
-        }
-        
         res.json(result);
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-// 历史记录相关路由
-app.get('/history/:id', async (req, res) => {
-    try {
-        const history = getHistory();
-        const item = history.find(h => h.id == req.params.id);
-        if (!item) return res.status(404).send('历史记录不存在');
-        await loadProto();
-        loadPlantConfig();
-        const result = await parseHexMessage(item.fullHex);
-        res.render('index', { result, hexInput: item.fullHex, history, formatTime });
-    } catch (e) {
-        res.status(500).send('解析失败: ' + e.message);
-    }
-});
-
-app.post('/history/clear', (req, res) => {
-    try {
-        fs.writeFileSync(historyFile, JSON.stringify([], null, 2));
-        res.redirect('/');
-    } catch (e) {
-        res.status(500).send('清空失败: ' + e.message);
-    }
-});
-
-app.post('/history/delete/:id', (req, res) => {
-    try {
-        let history = getHistory();
-        history = history.filter(h => h.id != req.params.id);
-        fs.writeFileSync(historyFile, JSON.stringify(history, null, 2));
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.get('/api/history', (req, res) => {
-    try {
-        res.json(getHistory());
-    } catch (e) {
-        res.status(500).json({ error: e.message });
     }
 });
 

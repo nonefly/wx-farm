@@ -385,52 +385,6 @@
     </div>
     <% } %>
 
-    <% if (history && history.length > 0) { %>
-    <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-          <span>📜</span> 历史记录
-        </h3>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-500"><%= history.length %>/100</span>
-          <form action="/history/clear" method="POST" onsubmit="return confirm('确定清空所有历史记录吗？')">
-            <button type="submit" class="text-xs text-red-500 hover:text-red-700 px-3 py-1 border border-red-200 rounded-lg hover:bg-red-50 transition-all">
-              清空
-            </button>
-          </form>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto">
-        <% history.forEach(item => { %>
-          <div class="p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-all" 
-               onclick="window.location.href='/history/<%= item.id %>'"
-               data-id="<%= item.id %>">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-xs text-gray-500"><%= item.timestamp %></span>
-              <span class="source-badge text-xs px-2 py-0.5 rounded-full <%= item.source === 'auto' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' %>">
-                <%= item.source === 'auto' ? '自动' : '手动' %>
-              </span>
-            </div>
-            <div class="font-medium text-gray-800 text-sm truncate"><%= item.service %>.<%= item.method %></div>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                <%= item.type %>
-              </span>
-              <% if (item.mutantCount > 0) { %>
-                <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                  <%= item.mutantCount %> 变异
-                </span>
-              <% } %>
-            </div>
-            <div class="text-xs text-gray-400 font-mono truncate mt-1"><%= item.hex %></div>
-            <span class="delete-history text-red-500 hover:text-red-700 absolute top-2 right-2" 
-                  onclick="event.stopPropagation(); deleteHistory(<%= item.id %>)">×</span>
-          </div>
-        <% }) %>
-      </div>
-    </div>
-    <% } %>
-
     <div id="toast-container"></div>
     <div id="toast" class="toast" style="display: none;"></div>
 
@@ -572,27 +526,6 @@
           });
         });
       }
-
-      // 删除历史记录
-      async function deleteHistory(id) {
-        if (!confirm('确定删除这条记录吗？')) return;
-        
-        try {
-          const response = await fetch(`/history/delete/${id}`, {
-            method: 'POST'
-          });
-          
-          if (response.ok) {
-            showToast('已删除');
-            setTimeout(() => location.reload(), 500);
-          }
-        } catch (err) {
-          showToast('删除失败');
-        }
-      }
-      
-      // 全局删除函数
-      window.deleteHistory = deleteHistory;
 
       // 初始检查剪贴板
       if (autoParseEnabled) {
