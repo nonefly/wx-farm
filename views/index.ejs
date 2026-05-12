@@ -7,6 +7,67 @@
   <title>农场变异查看器</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <style>
+    .toggle-switch {
+      position: relative;
+      width: 60px;
+      height: 30px;
+      background: #e5e7eb;
+      border-radius: 30px;
+      transition: 0.3s;
+      cursor: pointer;
+    }
+    .toggle-switch.active {
+      background: #22c55e;
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      background: white;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: 0.3s;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .toggle-switch.active::after {
+      left: 32px;
+    }
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 14px;
+      z-index: 9999;
+      animation: slideUp 0.3s ease;
+      white-space: nowrap;
+      max-width: 90%;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    .loading {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #22c55e;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+  <style>
     .land-grid {
       display: grid;
       grid-template-columns: repeat(6, 1fr);
@@ -152,7 +213,16 @@
     </div>
 
     <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-6">
-      <form action="/" method="POST" class="space-y-4">
+      <!-- 自动解析开关 -->
+      <div class="flex items-center justify-between bg-gray-50 rounded-lg p-3 mb-4">
+        <div>
+          <div class="font-medium text-gray-800">自动解析模式</div>
+          <div class="text-xs text-gray-500">开启后自动读取剪贴板并解析HEX数据</div>
+        </div>
+        <div class="toggle-switch" id="toggleSwitch"></div>
+      </div>
+
+      <form id="parseForm" action="/" method="POST" class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">HEX数据</label>
           <textarea
@@ -164,7 +234,15 @@
         </div>
         <div class="flex gap-3">
           <button
+            type="button"
+            id="pasteBtn"
+            class="px-4 py-3 bg-green-100 text-green-700 border border-green-300 rounded-lg font-semibold hover:bg-green-200 transition-all"
+          >
+            📋 粘贴
+          </button>
+          <button
             type="submit"
+            id="parseBtn"
             class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg"
           >
             🔍 解析数据
@@ -307,20 +385,218 @@
     </div>
     <% } %>
 
+    <% if (history && history.length > 0) { %>
+    <div class="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <span>📜</span> 历史记录
+        </h3>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-500"><%= history.length %>/100</span>
+          <form action="/history/clear" method="POST" onsubmit="return confirm('确定清空所有历史记录吗？')">
+            <button type="submit" class="text-xs text-red-500 hover:text-red-700 px-3 py-1 border border-red-200 rounded-lg hover:bg-red-50 transition-all">
+              清空
+            </button>
+          </form>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto">
+        <% history.forEach(item => { %>
+          <div class="p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-all" 
+               onclick="window.location.href='/history/<%= item.id %>'"
+               data-id="<%= item.id %>">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-gray-500"><%= item.timestamp %></span>
+              <span class="source-badge text-xs px-2 py-0.5 rounded-full <%= item.source === 'auto' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' %>">
+                <%= item.source === 'auto' ? '自动' : '手动' %>
+              </span>
+            </div>
+            <div class="font-medium text-gray-800 text-sm truncate"><%= item.service %>.<%= item.method %></div>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                <%= item.type %>
+              </span>
+              <% if (item.mutantCount > 0) { %>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                  <%= item.mutantCount %> 变异
+                </span>
+              <% } %>
+            </div>
+            <div class="text-xs text-gray-400 font-mono truncate mt-1"><%= item.hex %></div>
+            <span class="delete-history text-red-500 hover:text-red-700 absolute top-2 right-2" 
+                  onclick="event.stopPropagation(); deleteHistory(<%= item.id %>)">×</span>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+    <% } %>
+
     <div id="toast-container"></div>
+    <div id="toast" class="toast" style="display: none;"></div>
 
     <script>
-      document.getElementById('clearBtn').addEventListener('click', () => {
-        document.getElementById('hex').value = '';
+      // 自动解析模式
+      let autoParseEnabled = localStorage.getItem('autoParse') === 'true';
+      const toggleSwitch = document.getElementById('toggleSwitch');
+      const hexTextarea = document.getElementById('hex');
+      const parseForm = document.getElementById('parseForm');
+      const pasteBtn = document.getElementById('pasteBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const parseBtn = document.getElementById('parseBtn');
+
+      // 初始化开关状态
+      if (autoParseEnabled) {
+        toggleSwitch.classList.add('active');
+      }
+
+      // 切换自动解析
+      toggleSwitch.addEventListener('click', () => {
+        autoParseEnabled = !autoParseEnabled;
+        localStorage.setItem('autoParse', autoParseEnabled);
+        toggleSwitch.classList.toggle('active');
+        showToast(autoParseEnabled ? '自动解析已开启' : '自动解析已关闭');
+        
+        if (autoParseEnabled) {
+          checkClipboard();
+        }
+      });
+
+      // 显示提示
+      function showToast(message, duration = 2000) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.style.display = 'block';
+        
+        setTimeout(() => {
+          toast.style.display = 'none';
+        }, duration);
+      }
+
+      // 检查剪贴板
+      async function checkClipboard() {
+        if (!autoParseEnabled) return;
+        
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim()) {
+            const trimmed = text.trim();
+            // 检查是否是hex格式（只包含0-9, a-f, A-F和空格）
+            if (/^[0-9a-fA-F\s]+$/.test(trimmed)) {
+              const currentHex = hexTextarea.value.trim();
+              if (currentHex !== trimmed) {
+                hexTextarea.value = trimmed;
+                showToast('已自动读取剪贴板');
+                // 自动解析
+                if (autoParseEnabled) {
+                  setTimeout(() => parseForm.submit(), 500);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.log('无法读取剪贴板:', err);
+        }
+      }
+
+      // 定期检查剪贴板（每2秒）
+      if (autoParseEnabled) {
+        setInterval(checkClipboard, 2000);
+      }
+
+      // 粘贴按钮
+      pasteBtn.addEventListener('click', async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text) {
+            hexTextarea.value = text.trim();
+            showToast('已粘贴剪贴板内容');
+            
+            // 如果开启了自动解析，自动提交
+            if (autoParseEnabled) {
+              parseForm.submit();
+            }
+          } else {
+            showToast('剪贴板为空');
+          }
+        } catch (err) {
+          showToast('无法读取剪贴板');
+        }
+      });
+
+      // 清空按钮
+      clearBtn.addEventListener('click', () => {
+        hexTextarea.value = '';
         showToast('已清空');
       });
 
-      function showToast(message) {
-        const toast = document.createElement('div');
-        toast.className = 'toast-msg';
-        toast.textContent = message;
-        document.getElementById('toast-container').appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+      // 监听页面可见性变化
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && autoParseEnabled) {
+          checkClipboard();
+        }
+      });
+
+      // 监听输入框变化，自动解析（如果开启）
+      let timeoutId;
+      hexTextarea.addEventListener('input', () => {
+        if (autoParseEnabled) {
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => {
+            if (hexTextarea.value.trim()) {
+              parseForm.submit();
+            }
+          }, 1000);
+        }
+      });
+
+      // 表单提交时显示加载状态
+      parseForm.addEventListener('submit', (e) => {
+        if (!hexTextarea.value.trim()) {
+          e.preventDefault();
+          showToast('请输入Hex数据');
+          return;
+        }
+        
+        parseBtn.innerHTML = '<span class="loading"></span> 解析中...';
+        parseBtn.disabled = true;
+      });
+
+      // 如果是手机端，优化触摸体验
+      if ('ontouchstart' in window) {
+        document.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('touchstart', () => {
+            btn.style.opacity = '0.8';
+          });
+          btn.addEventListener('touchend', () => {
+            btn.style.opacity = '1';
+          });
+        });
+      }
+
+      // 删除历史记录
+      async function deleteHistory(id) {
+        if (!confirm('确定删除这条记录吗？')) return;
+        
+        try {
+          const response = await fetch(`/history/delete/${id}`, {
+            method: 'POST'
+          });
+          
+          if (response.ok) {
+            showToast('已删除');
+            setTimeout(() => location.reload(), 500);
+          }
+        } catch (err) {
+          showToast('删除失败');
+        }
+      }
+      
+      // 全局删除函数
+      window.deleteHistory = deleteHistory;
+
+      // 初始检查剪贴板
+      if (autoParseEnabled) {
+        setTimeout(checkClipboard, 1000);
       }
     </script>
   </div>
